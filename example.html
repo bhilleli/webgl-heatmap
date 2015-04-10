@@ -9,41 +9,111 @@
 		<link rel="stylesheet" href="http://jqueryui.com/resources/demos/style.css">
   <script>
   $(function() {
-  
-  
-   var heatMapR=100;
-    $( "#slider" ).slider({
-      orientation: "horizontal",
-      range: "min",
-      max: 500,
-      value: heatMapR,
-	  slide:refreshSwatch,
-	  change:refreshSwatch
-    });
-	var refreshSwatch= function()
-	{
-		alert(heatMapR);
-		heatMapR=$("#slider").slider("value"),
+	
+	var ptsGeographic=[];
+	var ptsArray=[]; //canvas
+	var zoomRatio = 0;
+	var centerx;
+	var centery;
+	//request the data and covert the geographic coordinates to canvas coordinates
+	$.get("gps.json", function(result){
+		//jsonPts = result;
+		var objPts= result;//jQuery.parseJSON(jsonPts);
+		var x,y,xmin,ymin,xmax,ymax;
+		var i;
+		for(i=0;i<objPts.geometries.length;i++)
+		{
+			var objPt = objPts.geometries[i];
+			x = objPt.coordinates[0];
+			y = objPt.coordinates[1];
+			//alert(x);
+			if(i==0)
+			{
+				xmin = xmax = x;
+				ymin = ymax = y;
+			}
+			if(x>xmax) xmax= x;
+			if(x<xmin) xmin=x;
+			if(y>ymax) ymax= y;
+			if(y<ymin) ymin=y;
+			
+			
+		}
+		var extentx = (xmax-xmin);
+		var extenty = (ymax-ymin);
+		 centerx = (xmax+xmin)/2;
+		 centery = (ymax+ymin)/2;
+		var ratio;//???????????????
+		if(extentx>extenty) {ratio = 1000/extentx;} else{ ratio = 1000/extenty; }
 		
-		heatmap.clear();
-		paintAtCoord(500,500);
+		zoomRatio = ratio;
+		
+		for(i=0;i<objPts.geometries.length;i++)
+		{
+			var objPt = objPts.geometries[i];
+			x = objPt.coordinates[0];
+			y = objPt.coordinates[1];
+			ptsGeographic.push([x,y]);
+		}
+		ConvertCoords(zoomRatio);
+		alert("data is OK");
+	});
+	
+	var ConvertCoords = function(ratio){
+		ptsArray=[];
+		var i;
+		for(i=0;i<ptsGeographic.length ;i++)
+		{
+			ptsArray.push([ 960+(ptsGeographic[i][0]-centerx)*ratio,
+			480-(ptsGeographic[i][1]-centery)*ratio]);
+		}
 	}
 	
+	
+	var heatMapR=10;
+	//slider to adjust the radius of heatmap
+    $( "#slider" ).slider({
+      orientation: "horizontal",
+      max: 100,
+	  change:function(event,ui) {
+        $("#amount").val(ui.value);
+		heatMapR= ui.value;
+		heatmap.clear();
+		paintAtCoord(500,500);
+		//heatmap.multiply(heatMapR/100);
+		//heatmap.update()
+      }
+    });
+	
+	var intensify = 1;
+	$( "#slider_intensify" ).slider({
+      orientation: "horizontal",
+      max: 10,step:0.1,
+	  change:function(event,ui) {
+        $("#amount").val(ui.value);
+		//zoomRatio = ui.value*zoomRatio;
+		ConvertCoords(zoomRatio*ui.value);
+		heatmap.clear();
+		paintAtCoord(500,500);
+      }
+    });
+
 	 var canvas = document.getElementsByTagName('canvas')[0];
                 var heatmap = createWebGLHeatmap({canvas: canvas, intensityToAlpha:true});
                 //var heatmap = createWebGLHeatmap({canvas: canvas, intensityToAlpha:true, alphaRange: [1, 0]}); // inverse transparency
                 //var heatmap = createWebGLHeatmap({canvas: canvas, intensityToAlpha:true, alphaRange: [0, 0.05]}); // steep transparency
                 //var heatmap = createWebGLHeatmap({canvas: canvas, intensityToAlpha:true, gradientTexture:'deep-sea-gradient.png'});
-                //var heatmap = createWebGLHeatmap({canvas: canvas, intensityToAlpha:false, gradientTexture:'skyline-gradient.png'});
+                //var heatmap = createWebGLHeatmap({canvas: canvas, intensityToAlpha:true, gradientTexture:'skyline-gradient.png'});
                 //var heatmap = createWebGLHeatmap({width: 500, height: 500}); // statically sized heatmap
 
                 document.body.appendChild(heatmap.canvas);
 
                 var paintAtCoord = function(x, y){
                     var count = 0;
-                    while(count < 100){
-                        var xoff = Math.random()*2-1;  // -1~1
-                        var yoff = Math.random()*2-1;  // -1~1
+					
+                    while(count<ptsArray.length){
+                        //var xoff = Math.random()*2-1;  // -1~1
+                        //var yoff = Math.random()*2-1;  // -1~1
                         //var l = xoff*xoff + yoff*yoff; 
                         //if(l > 1){
                         //    continue;
@@ -52,7 +122,7 @@
                         //xoff/=ls; yoff/=ls;
                         //xoff*=1-l; yoff*=1-l;
                         count += 1;
-                        heatmap.addPoint(x+xoff*200, y+yoff*200, heatMapR, 0.1);
+                        heatmap.addPoint(ptsArray[count][0], ptsArray[count][1], heatMapR,0.1);
                     }
                 }
 				//paintAtCoord(500,500);
@@ -77,7 +147,7 @@
                         
                 }
                 canvas.onclick = function(){
-                    
+                    heatmap.clear();
 					paintAtCoord(500, 500);
 					//alert("");
                 }
@@ -115,6 +185,10 @@
                 color: black;
                 overflow: hidden;
             }
+			canvas{
+				border:1;
+			}
+
             div.controls{
                 font-weight: bold;
                 position: absolute;
@@ -123,15 +197,28 @@
             }
 			div.slider
 			{
-				top:20px;
+				
 				left:10px;
 				width:300px;
-				
 			}
+			
+			div.slider_intensify
+			{
+				
+				left:350px;
+				width:300px;
+			}
+			
         </style>
     </head>
     <body>
+	<p>
+			<label for="amount">Radius:</label>
+			<input type="text" id="amount" readonly style="border:0; color:#f6931f; font-weight:bold;">
+
+	</p>
 		<div id="slider" class="slider"></div>
+		<div id="slider_intensify" class="slider_intensify"></div>
         <canvas></canvas>
     </body>
 </html>
